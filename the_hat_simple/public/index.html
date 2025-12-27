@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Hat - ذا هات</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- مكتبة Socket.io عشان الاتصال المباشر -->
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+
+    <header>
+        <div class="logo-container">
+            <!-- اللوقو حقك يا وحش -->
+            <img src="logo.webp" alt="The Hat Logo" class="logo-img">
+        </div>
+        <h1>THE HAT | ذا هات</h1>
+    </header>
+
+    <div class="container">
+
+        <!-- ================= صفحة اختيار الفرع ================= -->
+        <div id="branch-page" class="page active">
+            <h2 style="text-align: center; margin-bottom: 20px; color: #aaa;">اختر الفرع الأقرب لك</h2>
+            
+            <div class="branch-card" style="margin-bottom: 20px;">
+                <button class="btn" onclick="selectBranch('okaz')">فرع عكاظ</button>
+            </div>
+            
+            <div class="branch-card">
+                <button class="btn" onclick="selectBranch('halqa')">فرع الحلقة</button>
+            </div>
+
+            <div style="margin-top: 40px; text-align: center;">
+                <p style="color: #666; font-size: 0.9rem;">موظف؟</p>
+                <button onclick="showPage('admin-login')" style="background: none; border: none; color: #444; text-decoration: underline; cursor: pointer;">دخول المطبخ</button>
+            </div>
+        </div>
+
+        <!-- ================= صفحة المنيو ================= -->
+        <div id="menu-page" class="page">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 id="selected-branch-title">المنيو</h2>
+                <button onclick="showPage('branch-page')" style="background: none; border: none; color: #aaa; cursor: pointer;">تغيير الفرع</button>
+            </div>
+
+            <div id="menu-items">
+                <!-- الأصناف بتنزل هنا بالجافاسكريبت -->
+            </div>
+
+            <!-- السلة العائمة -->
+            <div id="cart-float" class="cart-float" style="display: none;" onclick="showPage('checkout-page')">
+                <span id="cart-count">0 منتجات</span>
+                <span id="cart-total">0 ريال</span>
+                <span>إتمام الطلب &larr;</span>
+            </div>
+        </div>
+
+        <!-- ================= صفحة الدفع وإكمال الطلب ================= -->
+        <div id="checkout-page" class="page">
+            <button onclick="showPage('menu-page')" class="btn btn-secondary" style="margin-bottom: 20px;">&rarr; رجوع للمنيو</button>
+            
+            <h2 style="margin-bottom: 20px; color: var(--accent-color);">ملخص الطلب</h2>
+            <div id="checkout-items" style="background: #1a1a1a; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <!-- تفاصيل السلة هنا -->
+            </div>
+
+            <h3 style="margin-bottom: 15px;">بياناتك يا غالي</h3>
+            <form id="order-form" onsubmit="submitOrder(event)">
+                <div class="form-group">
+                    <label>الاسم الكريم</label>
+                    <input type="text" id="customer-name" required placeholder="مثلاً: محمد العتيبي">
+                </div>
+                <div class="form-group">
+                    <label>رقم الجوال</label>
+                    <input type="tel" id="customer-phone" required placeholder="05xxxxxxxx">
+                </div>
+                <div class="form-group">
+                    <label>نوع وموديل السيارة (عشان نعرفك)</label>
+                    <input type="text" id="car-info" required placeholder="مثلاً: كامري بيضاء 2020">
+                </div>
+                
+                <button type="submit" class="btn">تأكيد الطلب (الدفع عند الاستلام)</button>
+            </form>
+        </div>
+
+        <!-- ================= صفحة الفاتورة (تتبع الطلب) ================= -->
+        <div id="invoice-page" class="page">
+            <div style="text-align: center; padding: 30px 0;">
+                <div style="font-size: 4rem; color: var(--success-color); margin-bottom: 10px;">&#10004;</div>
+                <h2 style="color: var(--accent-color);">تم استلام طلبك بنجاح!</h2>
+                <p style="color: #aaa; margin-top: 10px;">رقم الطلب: <span id="invoice-id" style="color: white; font-weight: bold;">#</span></p>
+            </div>
+
+            <div class="order-card" style="text-align: center;">
+                <p>حالة الطلب الحالية:</p>
+                <h1 id="invoice-status" style="font-size: 2rem; margin: 15px 0; color: var(--accent-color);">جاري الانتظار...</h1>
+                <p style="font-size: 0.9rem; color: #888;">خليك في هالصفحة، بتتحدث تلقائياً لما يجهز طلبك</p>
+            </div>
+
+            <div style="margin-top: 30px;">
+                <h3 style="border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 15px;">تفاصيل الفاتورة</h3>
+                <div id="invoice-details"></div>
+                <div style="margin-top: 15px; font-weight: bold; font-size: 1.2rem; text-align: left;">
+                    المجموع: <span id="invoice-total" style="color: var(--accent-color);">0</span> ريال
+                </div>
+            </div>
+            
+            <button onclick="location.reload()" class="btn btn-secondary" style="margin-top: 30px;">طلب جديد</button>
+        </div>
+
+        <!-- ================= صفحة دخول الأدمن ================= -->
+        <div id="admin-login" class="page">
+            <h2 style="text-align: center; margin-bottom: 20px;">دخول المطبخ / الكاشير</h2>
+            <div class="form-group">
+                <label>الرمز السري</label>
+                <input type="password" id="admin-pin" placeholder="أدخل الرمز" style="text-align: center; letter-spacing: 5px; font-size: 1.5rem;">
+            </div>
+            <button onclick="checkAdminPin()" class="btn">دخول</button>
+            <button onclick="showPage('branch-page')" class="btn btn-secondary">رجوع</button>
+        </div>
+
+        <!-- ================= صفحة لوحة التحكم (المطبخ) ================= -->
+        <div id="admin-dashboard" class="page">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #333; padding-bottom: 10px;">
+                <h2>👨‍🍳 المطبخ (الطلبات الحية)</h2>
+                <button onclick="location.reload()" style="background: #333; color: white; border: none; padding: 5px 10px; border-radius: 4px;">خروج</button>
+            </div>
+
+            <div id="admin-orders-list">
+                <p style="text-align: center; color: #666; margin-top: 50px;">لا توجد طلبات حالياً...</p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- مودال اختيار الموقع -->
+    <div id="location-modal" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-bottom: 15px; color: var(--accent-color);">توجيه للفرع</h3>
+            <p style="margin-bottom: 20px;">تبي نفتح لك قوقل ماب ولا تدل الطريق؟</p>
+            <button id="maps-btn" class="btn">ودني للموقع (Google Maps)</button>
+            <button onclick="closeModalAndGoToMenu()" class="btn btn-secondary">أعرف الموقع، كمل الطلب</button>
+        </div>
+    </div>
+
+    <!-- صوت التنبيه (مخفي) -->
+    <audio id="notification-sound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"></audio>
+
+    <script>
+        // ================= البيانات (المنيو) =================
+        const menuItems = [
+            { id: 1, name: "برجر ذا هات كلاسيك", price: 28, category: "برجر" },
+            { id: 2, name: "دبل تشيز برجر", price: 36, category: "برجر" },
+            { id: 3, name: "برجر دجاج كرسبي", price: 26, category: "برجر" },
+            { id: 4, name: "بطاطس مقلية", price: 8, category: "مقبلات" },
+            { id: 5, name: "بطاطس بالجبن", price: 14, category: "مقبلات" },
+            { id: 6, name: "مشروب غازي", price: 5, category: "مشروبات" },
+            { id: 7, name: "ماء", price: 2, category: "مشروبات" }
+        ];
+
+        const branches = {
+            'okaz': 'https://maps.app.goo.gl/tDuWBrnBc27WJgiSA?g_st=ipc',
+            'halqa': 'https://maps.app.goo.gl/eWtxLwmejQPABrAt5?g_st=ipc'
+        };
+
+        // ================= المتغيرات العامة =================
+        let cart = [];
+        let currentBranch = '';
+        let socket = io(); // الاتصال بالسيرفر
+        let myOrderId = null; // عشان الزبون يعرف طلبه
+
+        // ================= دوال التنقل والواجهة =================
+        function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById(pageId).classList.add('active');
+            window.scrollTo(0, 0);
+        }
+
+        function selectBranch(branch) {
+            currentBranch = branch;
+            const modal = document.getElementById('location-modal');
+            const mapsBtn = document.getElementById('maps-btn');
+            
+            // نجهز زر الماب بالرابط الصح
+            mapsBtn.onclick = () => {
+                window.open(branches[branch], '_blank');
+                closeModalAndGoToMenu();
+            };
+            
+            modal.classList.add('active');
+        }
+
+        function closeModalAndGoToMenu() {
+            document.getElementById('location-modal').classList.remove('active');
+            document.getElementById('selected-branch-title').innerText = 
+                currentBranch === 'okaz' ? 'منيو فرع عكاظ' : 'منيو فرع الحلقة';
+            renderMenu();
+            showPage('menu-page');
+        }
+
+        // ================= دوال السلة والمنيو =================
+        function renderMenu() {
+            const container = document.getElementById('menu-items');
+            container.innerHTML = menuItems.map(item => `
+                <div class="menu-item">
+                    <div class="item-info">
+                        <h3>${item.name}</h3>
+                        <div class="item-price">${item.price} ريال</div>
+                    </div>
+                    <button class="add-btn" onclick="addToCart(${item.id})">+</button>
+                </div>
+            `).join('');
+        }
+
+        function addToCart(itemId) {
+            const item = menuItems.find(i => i.id === itemId);
+            cart.push(item);
+            updateCartUI();
+            
+            // اهتزاز بسيط للسلة عشان يحس المستخدم
+            const cartFloat = document.getElementById('cart-float');
+            cartFloat.style.transform = 'scale(1.1)';
+            setTimeout(() => cartFloat.style.transform = 'scale(1)', 200);
+        }
+
+        function updateCartUI() {
+            const count = cart.length;
+            const total = cart.reduce((sum, item) => sum + item.price, 0);
+            
+            document.getElementById('cart-count').innerText = `${count} منتجات`;
+            document.getElementById('cart-total').innerText = `${total} ريال`;
+            
+            const cartFloat = document.getElementById('cart-float');
+            if (count > 0) cartFloat.style.display = 'flex';
+            
+            // تحديث صفحة الدفع كمان
+            renderCheckout();
+        }
+
+        function renderCheckout() {
+            const container = document.getElementById('checkout-items');
+            if (cart.length === 0) {
+                container.innerHTML = '<p>سلتك فاضية يا الحبيب</p>';
+                return;
+            }
+
+            // نجمع العناصر المتشابهة
+            const grouped = {};
+            cart.forEach(item => {
+                if (!grouped[item.id]) grouped[item.id] = { ...item, qty: 0 };
+                grouped[item.id].qty++;
+            });
+
+            container.innerHTML = Object.values(grouped).map(item => `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #333; padding-bottom: 5px;">
+                    <span>${item.name} x${item.qty}</span>
+                    <span>${item.price * item.qty} ريال</span>
+                </div>
+            `).join('') + `
+                <div style="text-align: left; font-weight: bold; margin-top: 15px; font-size: 1.2rem; color: var(--accent-color);">
+                    الإجمالي: ${cart.reduce((sum, i) => sum + i.price, 0)} ريال
+                </div>
+            `;
+        }
+
+        // ================= إرسال الطلب =================
+        function submitOrder(e) {
+            e.preventDefault();
+            if (cart.length === 0) return alert('السلة فاضية!');
+
+            const orderData = {
+                customerName: document.getElementById('customer-name').value,
+                customerPhone: document.getElementById('customer-phone').value,
+                carInfo: document.getElementById('car-info').value,
+                branch: currentBranch,
+                items: cart,
+                total: cart.reduce((sum, i) => sum + i.price, 0)
+            };
+
+            // نرسل الطلب للسيرفر
+            socket.emit('new-order', orderData);
+            
+            // نفضي السلة ونروح لصفحة الفاتورة
+            cart = [];
+            updateCartUI();
+            
+            // هنا بنستنى التحديث من السيرفر عشان نعرف رقم الطلب
+            // بس مبدئياً بنعرض رسالة انتظار
+            showPage('invoice-page');
+        }
+
+        // ================= لوحة التحكم (الأدمن) =================
+        function checkAdminPin() {
+            const pin = document.getElementById('admin-pin').value;
+            if (pin === '1234') {
+                showPage('admin-dashboard');
+                // نطلب تحديث الطلبات
+                socket.emit('request-orders');
+            } else {
+                alert('الرمز غلط يا ريس!');
+            }
+        }
+
+        function renderAdminOrders(orders) {
+            const container = document.getElementById('admin-orders-list');
+            
+            // نرتب الطلبات: الجديد فوق
+            const sortedOrders = orders.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+            if (sortedOrders.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #666; margin-top: 50px;">لا توجد طلبات حالياً...</p>';
+                return;
+            }
+
+            container.innerHTML = sortedOrders.map(order => {
+                // نحسب الوقت المنقضي
+                const timeAgo = Math.floor((new Date() - new Date(order.timestamp)) / 60000);
+                
+                return `
+                <div class="order-card ${order.status === 'completed' ? 'completed' : ''}">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div>
+                            <span class="status-badge status-${order.status === 'pending' ? 'pending' : (order.status === 'ready' ? 'ready' : 'preparing')}">
+                                ${getStatusText(order.status)}
+                            </span>
+                            <h3 style="margin: 5px 0;">${order.customerName}</h3>
+                            <p style="color: #aaa; font-size: 0.9rem;">${order.carInfo}</p>
+                        </div>
+                        <div style="text-align: left;">
+                            <div style="font-weight: bold; font-size: 1.2rem;">#${order.id.slice(-4)}</div>
+                            <div style="font-size: 0.8rem; color: #666;">منذ ${timeAgo} دقيقة</div>
+                            <div style="font-size: 0.8rem; color: var(--accent-color); margin-top: 5px;">${order.branch === 'okaz' ? 'عكاظ' : 'الحلقة'}</div>
+                        </div>
+                    </div>
+
+                    <div class="order-details">
+                        ${order.items.map(item => `<div>- ${item.name}</div>`).join('')}
+                        <div style="margin-top: 10px; font-weight: bold; text-align: left;">المجموع: ${order.total} ريال</div>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; margin-top: 15px;">
+                        <button onclick="updateStatus('${order.id}', 'preparing')" class="btn btn-secondary" style="flex: 1; font-size: 0.9rem;">جاري التجهيز</button>
+                        <button onclick="updateStatus('${order.id}', 'ready')" class="btn" style="flex: 1; font-size: 0.9rem; background-color: var(--success-color); color: white;">جاهز للاستلام</button>
+                        <button onclick="deleteOrder('${order.id}')" class="btn btn-danger" style="width: 50px;">X</button>
+                    </div>
+                </div>
+            `}).join('');
+        }
+
+        function getStatusText(status) {
+            if (status === 'pending') return 'طلب جديد 🆕';
+            if (status === 'preparing') return 'جاري التجهيز 🍳';
+            if (status === 'ready') return 'جاهز للاستلام ✅';
+            return status;
+        }
+
+        function updateStatus(orderId, status) {
+            socket.emit('update-status', { orderId, status });
+        }
+
+        function deleteOrder(orderId) {
+            if (confirm('أكيد تبي تحذف الطلب؟')) {
+                socket.emit('delete-order', orderId);
+            }
+        }
+
+        // ================= Socket.io Listeners (القلب النابض) =================
+        
+        // أول ما نشبك، نستلم الطلبات الموجودة
+        socket.on('initial-orders', (orders) => {
+            if (document.getElementById('admin-dashboard').classList.contains('active')) {
+                renderAdminOrders(orders);
+            }
+        });
+
+        // لما يجي تحديث على الطلبات (طلب جديد، تغيير حالة، حذف)
+        socket.on('order-update', (orders) => {
+            // تشغيل صوت تنبيه للكاشير إذا فيه طلب جديد
+            // (بسيط: إذا زاد عدد الطلبات عن اللي عندنا)
+            // هنا بنشغله دائماً للتنبيه
+            if (document.getElementById('admin-dashboard').classList.contains('active')) {
+                const audio = document.getElementById('notification-sound');
+                audio.play().catch(e => console.log('لازم تفاعل عشان الصوت يشتغل'));
+                renderAdminOrders(orders);
+            }
+
+            // تحديث صفحة الفاتورة للزبون
+            // ندور آخر طلب لهذا الزبون (بناءً على الاسم اللي دخله آخر مرة)
+            // حل بسيط: نخزن رقم الطلب لما يرسله (بس هنا بنسوي بحث سريع)
+            const myName = document.getElementById('customer-name').value;
+            if (myName && document.getElementById('invoice-page').classList.contains('active')) {
+                // ندور أحدث طلب لهذا الاسم
+                const myOrder = orders.filter(o => o.customerName === myName).sort((a, b) => b.timestamp - a.timestamp)[0];
+                
+                if (myOrder) {
+                    document.getElementById('invoice-id').innerText = '#' + myOrder.id.slice(-4);
+                    document.getElementById('invoice-status').innerText = getStatusText(myOrder.status);
+                    
+                    // تلوين الحالة
+                    const statusEl = document.getElementById('invoice-status');
+                    if (myOrder.status === 'ready') statusEl.style.color = 'var(--success-color)';
+                    else if (myOrder.status === 'preparing') statusEl.style.color = '#2196F3';
+                    else statusEl.style.color = 'var(--accent-color)';
+
+                    // تفاصيل الفاتورة
+                    document.getElementById('invoice-details').innerHTML = myOrder.items.map(item => 
+                        `<div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                            <span>${item.name}</span>
+                            <span>${item.price}</span>
+                        </div>`
+                    ).join('');
+                    document.getElementById('invoice-total').innerText = myOrder.total;
+                }
+            }
+        });
+
+    </script>
+</body>
+</html>
