@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Hat - ذا هات</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- مكتبة Socket.io من CDN لضمان التحميل -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        /* شاشة التحميل الأولية */
+        #initial-loader {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease;
+        }
+        .spinner {
+            width: 50px; height: 50px;
+            border: 5px solid #333;
+            border-top: 5px solid var(--accent-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* ختم التسليم */
+        .delivered-stamp {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-15deg);
+            border: 5px solid #4CAF50;
+            color: #4CAF50;
+            font-size: 2rem;
+            font-weight: bold;
+            padding: 10px 20px;
+            border-radius: 10px;
+            opacity: 0.8;
+            pointer-events: none;
+            z-index: 10;
+            background: rgba(0,0,0,0.7);
+        }
+
+        /* ختم عدم التسليم */
+        .undelivered-stamp {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-15deg);
+            border: 5px solid #f44336;
+            color: #f44336;
+            font-size: 1.5rem;
+            font-weight: bold;
+            padding: 10px 20px;
+            border-radius: 10px;
+            opacity: 0.8;
+            pointer-events: none;
+            z-index: 10;
+            background: rgba(0,0,0,0.7);
+        }
+
+        /* ستايل المؤقت */
+        .timer-container {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            margin: 20px 0;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .timer-text {
+            font-size: 1.3rem;
+            color: white;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+        .timer-display {
+            font-size: 3rem;
+            color: #fff;
+            font-weight: bold;
+            margin: 15px 0;
+            text-shadow: 2px 2px 10px rgba(0,0,0,0.3);
+        }
+        .timer-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- شاشة التحميل تظهر أول شيء -->
+    <div id="initial-loader">
+        <div class="spinner"></div>
+        <h3 style="color: var(--accent-color);">جاري الاتصال بالمطبخ...</h3>
+    </div>
+
+    <header>
+        <div class="logo-container">
+            <!-- اللوقو حقك يا وحش -->
+            <img src="./logo.webp" alt="The Hat Logo" class="logo-img" onerror="this.style.display='none'; document.querySelector('.logo-container').innerText='THE HAT'">
+        </div>
+        <h1>THE HAT | ذا هات</h1>
+    </header>
+
+    <div class="container">
+
+        <!-- ================= صفحة اختيار الفرع ================= -->
+        <div id="branch-page" class="page active">
+            <h2 style="text-align: center; margin-bottom: 20px; color: #aaa;">اختر الفرع الأقرب لك</h2>
+            
+            <div class="branch-card" style="margin-bottom: 20px;">
+                <button class="btn" onclick="selectBranch('okaz')">📍 شارع عكاظ (الطائف)</button>
+            </div>
+            
+            <div class="branch-card">
+                <button class="btn" onclick="selectBranch('halqa')">📍 الحلقة الشرقية (الطائف)</button>
+            </div>
+
+            <div style="margin-top: 40px; text-align: center;">
+                <p style="color: #666; font-size: 0.9rem;">موظف؟</p>
+                <button onclick="showPage('admin-login')" style="background: none; border: none; color: #444; text-decoration: underline; cursor: pointer;">دخول المطبخ</button>
+            </div>
+        </div>
+
+        <!-- ================= صفحة المنيو ================= -->
+        <div id="menu-page" class="page">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 id="selected-branch-title">المنيو</h2>
+                <button onclick="showPage('branch-page')" style="background: none; border: none; color: #aaa; cursor: pointer;">تغيير الفرع</button>
+            </div>
+
+            <!-- زر حالة الطلب (يظهر فقط إذا فيه طلب نشط) -->
+            <div id="order-status-btn" style="display: none; margin-bottom: 20px;">
+                <button onclick="checkOrderStatus()" class="btn" style="background: #2196F3; width: 100%; padding: 12px; font-size: 1.1rem; box-shadow: 0 4px 15px rgba(33, 150, 243, 0.4);">
+                    🔍 حالة الطلب
+                </button>
+            </div>
+
+            <div id="menu-items">
+                <!-- الأصناف بتنزل هنا بالجافاسكريبت -->
+            </div>
+
+            <!-- السلة العائمة -->
+            <div id="cart-float" class="cart-float" style="display: none;" onclick="showPage('checkout-page')">
+                <span id="cart-count">0 منتجات</span>
+                <span id="cart-total">0 ريال</span>
+                <span>إتمام الطلب &larr;</span>
+            </div>
+        </div>
+
+        <!-- ================= صفحة الدفع وإكمال الطلب ================= -->
+        <div id="checkout-page" class="page">
+            <button onclick="showPage('menu-page')" class="btn btn-secondary" style="margin-bottom: 20px;">&rarr; رجوع للمنيو</button>
+            
+            <h2 style="margin-bottom: 20px; color: var(--accent-color);">ملخص الطلب</h2>
+            <div id="checkout-items" style="background: #1a1a1a; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <!-- تفاصيل السلة هنا -->
+            </div>
+
+            <h3 style="margin-bottom: 15px;">بياناتك يا غالي</h3>
+            <form id="order-form" onsubmit="submitOrder(event)">
+                <div class="form-group">
+                    <label>الاسم الكريم</label>
+                    <input type="text" id="customer-name" required placeholder="مثلاً: محمد العتيبي">
+                    <small id="name-error" style="color: var(--danger-color); display: none;">الاسم مطلوب يا غالي</small>
+                </div>
+                <div class="form-group">
+                    <label>رقم الجوال (لازم يبدأ بـ 05 ويكون 10 أرقام)</label>
+                    <input type="tel" id="customer-phone" required placeholder="05xxxxxxxx" maxlength="10">
+                    <small id="phone-error" style="color: var(--danger-color); display: none;">رقم الجوال لازم يبدأ بـ 05 ويكون 10 أرقام</small>
+                </div>
+                <div class="form-group">
+                    <label>نوع وموديل السيارة (عشان نعرفك)</label>
+                    <input type="text" id="car-info" required placeholder="مثلاً: كامري بيضاء 2020">
+                </div>
+                
+                <button type="submit" id="submit-btn" class="btn">
+                    <span id="btn-text">تأكيد الطلب (الدفع عند الاستلام)</span>
+                    <span id="btn-loader" style="display: none;">جاري الإرسال... ⏳</span>
+                </button>
+            </form>
+        </div>
+
+        <!-- ================= صفحة الفاتورة (تتبع الطلب) ================= -->
+        <div id="invoice-page" class="page">
+            <div style="text-align: center; padding: 30px 0;">
+                <div style="font-size: 4rem; color: var(--success-color); margin-bottom: 10px;">&#10004;</div>
+                <h2 style="color: var(--accent-color);">تم استلام طلبك بنجاح!</h2>
+                <p style="color: #aaa; margin-top: 10px;">رقم الطلب: <span id="invoice-id" style="color: white; font-weight: bold;">#</span></p>
+            </div>
+
+            <!-- المؤقت للتعديل/الحذف -->
+            <div id="edit-timer-section" style="display: none;">
+                <div class="timer-container">
+                    <div class="timer-text">😎 ودك تعدل طلبك؟ يلا قبل ما يخلص الوقت!</div>
+                    <div class="timer-display" id="timer-display">0:59</div>
+                    <div class="timer-buttons">
+                        <button onclick="cancelOrder()" class="btn" style="background: #f44336;">❌ إلغاء الطلب</button>
+                        <button onclick="editOrder()" class="btn" style="background: #2196F3;">✏️ تعديل الطلب</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="order-card" style="text-align: center;">
+                <p>حالة الطلب الحالية:</p>
+                <h1 id="invoice-status" style="font-size: 2rem; margin: 15px 0; color: var(--accent-color);">جاري الانتظار...</h1>
+                <p style="font-size: 0.9rem; color: #888;">خليك في هالصفحة، بتتحدث تلقائياً لما يجهز طلبك</p>
+            </div>
+
+            <div style="margin-top: 30px;">
+                <h3 style="border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 15px;">تفاصيل الفاتورة</h3>
+                <div id="invoice-details"></div>
+                <div style="margin-top: 15px; font-weight: bold; font-size: 1.2rem; text-align: left;">
+                    المجموع: <span id="invoice-total" style="color: var(--accent-color);">0</span> ريال
+                </div>
+            </div>
+            
+            <!-- قسم عرض الطلبات الأخرى (لو فيه أكثر من طلب) -->
+            <div id="other-orders-section" style="display: none; margin-top: 30px; border-top: 2px solid #444; padding-top: 20px;">
+                <h3 style="color: #aaa; margin-bottom: 15px;">📋 طلباتك الأخرى:</h3>
+                <div id="other-orders-list"></div>
+            </div>
+            
+            <button onclick="goBackToMenu()" class="btn" style="margin-top: 20px; background: #4CAF50;">🍽️ ودك ترجع للمنيو لين يجهز طلبك؟</button>
+            <button onclick="startNewOrder()" class="btn btn-secondary" style="margin-top: 10px;">طلب جديد</button>
+        </div>
+
+        <!-- ================= صفحة دخول الأدمن ================= -->
+        <div id="admin-login" class="page">
+            <h2 style="text-align: center; margin-bottom: 20px;">دخول المطبخ / الكاشير</h2>
+            <div class="form-group">
+                <label>الرمز السري</label>
+                <input type="password" id="admin-pin" placeholder="أدخل الرمز" style="text-align: center; letter-spacing: 5px; font-size: 1.5rem;">
+            </div>
+            <button onclick="checkAdminPin()" class="btn">دخول</button>
+            <button onclick="showPage('branch-page')" class="btn btn-secondary">رجوع</button>
+        </div>
+
+        <!-- ================= صفحة لوحة التحكم (المطبخ) ================= -->
+        <div id="admin-dashboard" class="page">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #333; padding-bottom: 10px;">
+                <h2>👨‍🍳 المطبخ (الطلبات الحية)</h2>
+                <div>
+                    <button onclick="enableSound()" id="sound-btn" style="background: #333; color: white; border: none; padding: 5px 10px; border-radius: 4px; margin-left: 5px;">🔊 تفعيل الصوت</button>
+                    <button onclick="showPage('branch-page')" style="background: #333; color: white; border: none; padding: 5px 10px; border-radius: 4px;">خروج</button>
+                </div>
+            </div>
+
+            <div id="admin-orders-list">
+                <p style="text-align: center; color: #666; margin-top: 50px;">لا توجد طلبات حالياً...</p>
+            </div>
+
+            <!-- قسم الطلبات المكتملة -->
+            <div style="margin-top: 40px; border-top: 2px solid #4CAF50; padding-top: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="color: #4CAF50; margin: 0;">✅ الطلبات المكتملة (تم التسليم)</h3>
+                    <button onclick="clearCompleted()" style="background: #f44336; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">🗑️ تصفية الطلبات</button>
+                </div>
+                <div id="completed-orders-list">
+                    <p style="text-align: center; color: #666; margin-top: 20px;">لا توجد طلبات مكتملة...</p>
+                </div>
+            </div>
+
+            <!-- قسم الطلبات غير المسلمة -->
+            <div style="margin-top: 40px; border-top: 2px solid #f44336; padding-top: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="color: #f44336; margin: 0;">❌ الطلبات غير المسلمة (العميل لم يستلم)</h3>
+                    <button onclick="clearUndelivered()" style="background: #f44336; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer;">🗑️ تصفية الطلبات</button>
+                </div>
+                <div id="undelivered-orders-list">
+                    <p style="text-align: center; color: #666; margin-top: 20px;">لا توجد طلبات غير مسلمة...</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- مودال اختيار الموقع -->
+    <div id="location-modal" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-bottom: 15px; color: var(--accent-color);">توجيه للفرع</h3>
+            <p style="margin-bottom: 20px;">تبي نفتح لك قوقل ماب ولا تدل الطريق؟</p>
+            <button id="maps-btn" class="btn">ودني للموقع (Google Maps)</button>
+            <button onclick="closeModalAndGoToMenu()" class="btn btn-secondary">أعرف الموقع، كمل الطلب</button>
+        </div>
+    </div>
+
+    <!-- صوت التنبيه (مخفي) -->
+    <audio id="notification-sound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"></audio>
+
+    <script>
+        // ================= البيانات (المنيو الجديد - النسخة النهائية) =================
+        const menuItems = [
+            // 1. قسم الوجبات والساندوتشات
+            { id: 1, name: "هات وجبة لحم (950 cal)", price: 23, category: "وجبات" },
+            { id: 2, name: "هات وجبة دجاج (830 cal)", price: 21, category: "وجبات" },
+            { id: 3, name: "هات شوس لحم (490 cal)", price: 16, category: "ساندوتشات" },
+            { id: 4, name: "هات شوس دجاج (400 cal)", price: 14, category: "ساندوتشات" },
+            { id: 5, name: "هات برجر لحم (450 cal)", price: 14, category: "ساندوتشات" },
+            { id: 6, name: "هات برجر دجاج (360 cal)", price: 12, category: "ساندوتشات" },
+            { id: 7, name: "هات ستيك (لحم/دجاج)", price: 13, category: "ساندوتشات" },
+            { id: 8, name: "هات ستيك وجبة", price: 23, category: "وجبات" },
+            { id: 9, name: "هات حسني (350 cal)", price: 16, category: "ساندوتشات" },
+            { id: 10, name: "هات حسني وجبة", price: 18, category: "وجبات" },
+            { id: 11, name: "هات سبيشل حسني (390 cal)", price: 18, category: "ساندوتشات" },
+
+            // 2. قسم هات بطاطس
+            { id: 12, name: "بطاطس ويدجر (200 cal)", price: 9, category: "بطاطس" },
+            { id: 13, name: "بطاطس بالبصل المقرمش (220 cal)", price: 11, category: "بطاطس" },
+            { id: 14, name: "بطاطس باللحم المفروم (245 cal)", price: 12, category: "بطاطس" },
+            { id: 15, name: "بطاطس مكعبات (200 cal)", price: 10, category: "بطاطس" },
+            { id: 16, name: "بطاطس حلوة مع صوص تكساس (130 cal)", price: 11, category: "بطاطس" },
+            { id: 17, name: "بطاطس بالدجاج المفروم (238 cal)", price: 12, category: "بطاطس" },
+
+            // 3. قسم الإضافات
+            { id: 18, name: "صوص ذا هات", price: 2, category: "إضافات" },
+            { id: 19, name: "صوص تكساس", price: 2, category: "إضافات" },
+            { id: 20, name: "صوص جبن", price: 2, category: "إضافات" },
+            { id: 21, name: "هلابينو", price: 2, category: "إضافات" },
+            { id: 22, name: "شريحة جبن", price: 2, category: "إضافات" },
+            { id: 23, name: "بصل مقرمش", price: 2, category: "إضافات" },
+            { id: 24, name: "شيتوس", price: 2, category: "إضافات" },
+
+            // 4. قسم المشروبات
+            { id: 25, name: "بيبسي", price: 4, category: "مشروبات" },
+            { id: 26, name: "ديو", price: 4, category: "مشروبات" },
+            { id: 27, name: "سفن أب", price: 4, category: "مشروبات" },
+            { id: 28, name: "ميرندا", price: 4, category: "مشروبات" },
+            { id: 29, name: "ماء", price: 1, category: "مشروبات" }
+        ];
+
+        // ================= المتغيرات العامة =================
+        let cart = [];
+        let selectedBranch = '';
+        // نخزن قائمة بكل طلبات الزبون (مش طلب واحد بس)
+        let myOrders = JSON.parse(localStorage.getItem('myOrders') || '[]');
+        let currentOrderId = localStorage.getItem('currentOrderId'); // الطلب الحالي اللي يشوفه
+        let allOrders = [];
+        
+        // الاتصال بالسيرفر
+        const socket = io();
+
+        // ================= إدارة الصفحات =================
+        function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById(pageId).classList.add('active');
+            
+            // حفظ الصفحة الحالية عشان لو سوى تحديث
+            if (pageId !== 'initial-loader') {
+                localStorage.setItem('currentPage', pageId);
+            }
+
+            // إظهار/إخفاء زر حالة الطلب (فقط في صفحة المنيو وإذا فيه طلبات)
+            const orderStatusBtn = document.getElementById('order-status-btn');
+            if (pageId === 'menu-page' && myOrders.length > 0) {
+                orderStatusBtn.style.display = 'block';
+                updateOrderStatusButton(); // نحدث محتوى الزر
+            } else {
+                orderStatusBtn.style.display = 'none';
+            }
+        }
+
+        // ================= منطق التطبيق =================
+        function selectBranch(branch) {
+            selectedBranch = branch;
+            localStorage.setItem('selectedBranch', branch); // حفظ الفرع
+            
+            document.getElementById('selected-branch-title').innerText = 
+                branch === 'okaz' ? 'منيو فرع شارع عكاظ' : 'منيو فرع الحلقة الشرقية';
+            
+            renderMenu();
+            
+            // فتح المودال حق الموقع
+            const modal = document.getElementById('location-modal');
+            const mapsBtn = document.getElementById('maps-btn');
+            
+            if (branch === 'okaz') {
+                mapsBtn.onclick = () => window.open('https://maps.app.goo.gl/jFUD34KidKubSsNR7', '_blank');
+            } else {
+                mapsBtn.onclick = () => window.open('https://maps.app.goo.gl/j8BojykPyXVKNYV38', '_blank');
+            }
+            
+            modal.style.display = 'flex';
+        }
+
+        function closeModalAndGoToMenu() {
+            document.getElementById('location-modal').style.display = 'none';
+            showPage('menu-page');
+        }
+
+        function renderMenu() {
+            const container = document.getElementById('menu-items');
+            container.innerHTML = '';
+            
+            const categories = [...new Set(menuItems.map(item => item.category))];
+            
+            categories.forEach(cat => {
+                const catTitle = document.createElement('h3');
+                catTitle.style.color = 'var(--accent-color)';
+                catTitle.style.marginTop = '20px';
+                catTitle.style.borderBottom = '1px solid #333';
+                catTitle.innerText = cat;
+                container.appendChild(catTitle);
+                
+                menuItems.filter(i => i.category === cat).forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'menu-item';
+                    div.innerHTML = `
+                        <div>
+                            <div style="font-weight: bold;">${item.name}</div>
+                            <div style="color: var(--accent-color);">${item.price} ريال</div>
+                        </div>
+                        <button class="btn" style="width: auto; padding: 5px 15px;" onclick="addToCart(${item.id})">إضافة +</button>
+                    `;
+                    container.appendChild(div);
+                });
+            });
+        }
+
+        function addToCart(itemId) {
+            const item = menuItems.find(i => i.id === itemId);
+            cart.push(item);
+            updateCartUI();
+        }
+
+        function updateCartUI() {
+            const float = document.getElementById('cart-float');
+            const count = document.getElementById('cart-count');
+            const total = document.getElementById('cart-total');
+            
+            if (cart.length > 0) {
+                float.style.display = 'flex';
+                count.innerText = `${cart.length} منتجات`;
+                const sum = cart.reduce((a, b) => a + b.price, 0);
+                total.innerText = `${sum} ريال`;
+                
+                // تحديث صفحة الدفع كمان
+                const checkoutItems = document.getElementById('checkout-items');
+                checkoutItems.innerHTML = cart.map(item => `
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #333; padding-bottom: 5px;">
+                        <span>${item.name}</span>
+                        <span>${item.price} ريال</span>
+                    </div>
+                `).join('');
+                
+                checkoutItems.innerHTML += `
+                    <div style="margin-top: 15px; font-weight: bold; font-size: 1.2rem; text-align: left;">
+                        المجموع: <span style="color: var(--accent-color);">${sum}</span> ريال
+                    </div>
+                `;
+            } else {
+                float.style.display = 'none';
+            }
+        }
+
+        function submitOrder(e) {
+            e.preventDefault();
+            
+            const name = document.getElementById('customer-name').value;
+            const phone = document.getElementById('customer-phone').value;
+            const car = document.getElementById('car-info').value;
+            
+            // تحقق بسيط
+            if (!name) {
+                document.getElementById('name-error').style.display = 'block';
+                return;
+            }
+            if (!phone.startsWith('05') || phone.length !== 10) {
+                document.getElementById('phone-error').style.display = 'block';
+                return;
+            }
+            
+            // تشغيل اللودر
+            const btn = document.getElementById('submit-btn');
+            btn.disabled = true;
+            document.getElementById('btn-text').style.display = 'none';
+            document.getElementById('btn-loader').style.display = 'inline';
+            
+            const orderData = {
+                customerName: name,
+                phone: phone,
+                carInfo: car,
+                branch: selectedBranch,
+                items: cart,
+                total: cart.reduce((a, b) => a + b.price, 0),
+                status: 'pending',
+                timestamp: new Date().toISOString()
+            };
+            
+            // إرسال للسيرفر
+            socket.emit('new-order', orderData);
+        }
+
+        // ================= أدمن / مطبخ =================
+        function checkAdminPin() {
+            const pin = document.getElementById('admin-pin').value;
+            if (pin === '1234') {
+                showPage('admin-dashboard');
+                renderAdminOrders(allOrders);
+            } else {
+                alert('الرمز غلط يا الحبيب!');
+            }
+        }
+
+        function getShortId(longId) {
+            // لو الرقم يبدأ بـ ORD- نرجع الرقم بس
+            if (longId.startsWith('ORD-')) {
+                return longId.replace('ORD-', '');
+            }
+            // لو مافيه ORD نرجع أول 4 أحرف
+            return longId.slice(0, 4).toUpperCase();
+        }
+
+        function renderAdminOrders(orders) {
+            const list = document.getElementById('admin-orders-list');
+            
+            // فلترة الطلبات المؤرشفة (ما نعرضها في القائمة الرئيسية)
+            const activeOrders = orders.filter(o => o.status !== 'archived');
+            
+            if (activeOrders.length === 0) {
+                list.innerHTML = '<p style="text-align: center; color: #666; margin-top: 50px;">لا توجد طلبات نشطة حالياً...</p>';
+                return;
+            }
+            
+            // ترتيب: الجديد فوق
+            activeOrders.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            
+            list.innerHTML = activeOrders.map(order => {
+                const timeAgo = Math.floor((new Date() - new Date(order.timestamp)) / 60000);
+                
+                // تحديد لون الكرت بناءً على الحالة
+                let cardStyle = '';
+                let stamp = '';
+                
+                if (order.status === 'delivered') {
+                    cardStyle = 'border: 2px solid #4CAF50; background: #1a331a;'; // أخضر غامق
+                    stamp = '<div class="delivered-stamp">تم التسليم</div>';
+                } else if (order.status === 'ready') {
+                    cardStyle = 'border: 2px solid var(--accent-color);';
+                }
+
+                return `
+                <div class="order-card" style="position: relative; ${cardStyle}">
+                    ${stamp}
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                        <div>
+                            <h3 style="margin: 0; color: var(--accent-color);">${order.customerName}</h3>
+                            <div style="font-size: 0.9rem; color: #fff;">📱 ${order.phone}</div>
+                            <div style="font-size: 0.9rem; color: #aaa;">🚗 ${order.carInfo}</div>
+                        </div>
+                        <div style="text-align: left;">
+                            <div style="font-weight: bold; font-size: 1.2rem;">#${getShortId(order.id)}</div>
+                            <div style="font-size: 0.8rem; color: #666;">منذ ${timeAgo} دقيقة</div>
+                            <div style="font-size: 0.8rem; color: var(--accent-color); margin-top: 5px;">${order.branch === 'okaz' ? 'شارع عكاظ' : 'الحلقة الشرقية'}</div>
+                        </div>
+                    </div>
+
+                    <div style="background: #222; padding: 10px; border-radius: 4px; margin-bottom: 10px;">
+                        ${order.items.map(item => `
+                            <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 3px;">
+                                <span>${item.name}</span>
+                                <span>${item.price}</span>
+                            </div>
+                        `).join('')}
+                        <div style="border-top: 1px solid #444; margin-top: 5px; padding-top: 5px; font-weight: bold; text-align: left;">
+                            الإجمالي: ${order.total} ريال
+                        </div>
+                    </div>
+
+                    ${order.status !== 'delivered' && order.status !== 'completed' && order.status !== 'undelivered' ? `
+                    <div class="action-buttons">
+                        ${order.status === 'pending' ? `<button onclick="updateStatus('${order.id}', 'preparing')" class="btn" style="background: #2196F3;">👨‍🍳 جاري التحضير</button>` : ''}
+                        ${order.status === 'preparing' ? `<button onclick="updateStatus('${order.id}', 'ready')" class="btn" style="background: var(--success-color);">✅ جاهز للاستلام</button>` : ''}
+                        ${order.status === 'ready' ? `
+                            <button onclick="updateStatus('${order.id}', 'completed')" class="btn" style="background: #4CAF50;">🤝 تم تسليم العميل</button>
+                            <button onclick="updateStatus('${order.id}', 'undelivered')" class="btn" style="background: #f44336; margin-top: 5px;">❌ العميل لم يستلم الطلب</button>
+                        ` : ''}
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+            }).join('');
+        }
+
+        function getStatusText(status) {
+            if (status === 'pending') return 'جاري الانتظار...';
+            if (status === 'preparing') return 'جاري التجهيز 🍳';
+            if (status === 'ready') return 'جاهز للاستلام ✅';
+            if (status === 'delivered') return 'تم الاستلام 🎉';
+            if (status === 'completed') return 'تم التسليم ✅';
+            if (status === 'undelivered') return 'لم يتم التسليم ❌';
+            return status;
+        }
+
+        function updateStatus(orderId, status) {
+            // إرسال تحديث الحالة للسيرفر
+            socket.emit('update-status', { orderId, status });
+        }
+
+        // دوال تصفية الطلبات المكتملة
+        function clearCompleted() {
+            if (confirm('متأكد تبي تحذف كل الطلبات المكتملة؟')) {
+                socket.emit('clear-completed');
+            }
+        }
+
+        // دالة تصفية الطلبات غير المسلمة
+        function clearUndelivered() {
+            if (confirm('متأكد تبي تحذف كل الطلبات غير المسلمة؟')) {
+                socket.emit('clear-undelivered');
+            }
+        }
+
+        function enableSound() {
+            const audio = document.getElementById('notification-sound');
+            audio.play().then(() => {
+                audio.pause();
+                audio.currentTime = 0;
+                document.getElementById('sound-btn').innerText = '✅ الصوت مفعل';
+                document.getElementById('sound-btn').style.color = '#4CAF50';
+            }).catch(e => alert('لازم تضغط عشان المتصفح يسمح بالصوت'));
+        }
+        
+        // دالة الرجوع للمنيو بدون مسح الطلبات
+        function goBackToMenu() {
+            showPage('menu-page');
+        }
+
+        function startNewOrder() {
+            // نمسح كل شي متعلق بالطلب القديم
+            localStorage.removeItem('currentOrderId');
+            localStorage.removeItem('orderTime');
+            localStorage.removeItem('currentPage');
+            currentOrderId = null;
+            cart = [];
+            
+            // نوقف المؤقت لو شغال
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            
+            showPage('branch-page');
+        }
+
+        // متغيرات المؤقت
+        let timerInterval = null;
+        let timerOrderId = null; // رقم الطلب اللي له مؤقت نشط
+        let timerHasEnded = {}; // سجل بالطلبات اللي خلص مؤقتها
+
+        // دالة بدء المؤقت (فقط للطلبات الجديدة)
+        function startEditTimer(orderId, orderTime) {
+            const timerSection = document.getElementById('edit-timer-section');
+            const timerDisplay = document.getElementById('timer-display');
+            
+            // لو المؤقت خلص لهذا الطلب، مانشغله مرة ثانية
+            if (timerHasEnded[orderId]) {
+                timerSection.style.display = 'none';
+                return;
+            }
+            
+            // لو فيه مؤقت شغال لطلب ثاني، نوقفه
+            if (timerInterval && timerOrderId !== orderId) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            
+            // لو المؤقت شغال لنفس الطلب، مانشغله مرة ثانية
+            if (timerInterval && timerOrderId === orderId) {
+                return;
+            }
+            
+            if (!orderId || !orderTime) return;
+            
+            const elapsed = Math.floor((Date.now() - orderTime) / 1000);
+            let timeRemaining = 59 - elapsed;
+            
+            if (timeRemaining <= 0) {
+                timerSection.style.display = 'none';
+                timerHasEnded[orderId] = true;
+                return;
+            }
+            
+            timerSection.style.display = 'block';
+            timerOrderId = orderId;
+            
+            // نعرض الوقت المتبقي مباشرة
+            const minutes = Math.floor(timeRemaining / 60);
+            const seconds = timeRemaining % 60;
+            timerDisplay.innerText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            
+            // تحديث المؤقت كل ثانية
+            timerInterval = setInterval(() => {
+                timeRemaining--;
+                
+                if (timeRemaining <= 0) {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                    timerOrderId = null;
+                    timerSection.style.display = 'none';
+                    timerHasEnded[orderId] = true;
+                    return;
+                }
+                
+                const minutes = Math.floor(timeRemaining / 60);
+                const seconds = timeRemaining % 60;
+                timerDisplay.innerText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            }, 1000);
+        }
+
+        // دالة إلغاء الطلب
+        function cancelOrder() {
+            if (confirm('متأكد تبي تلغي الطلب؟')) {
+                socket.emit('cancel-order', currentOrderId);
+                
+                // نشيل الطلب من القائمة
+                myOrders = myOrders.filter(id => id !== currentOrderId);
+                localStorage.setItem('myOrders', JSON.stringify(myOrders));
+                
+                // نحذف وقت الطلب الخاص به
+                localStorage.removeItem('orderTime_' + currentOrderId);
+                
+                currentOrderId = null;
+                localStorage.removeItem('currentOrderId');
+                localStorage.removeItem('orderTime');
+                
+                cart = [];
+                clearInterval(timerInterval);
+                
+                alert('تم إلغاء الطلب بنجاح!');
+                updateOrderStatusButton();
+                showPage('branch-page');
+            }
+        }
+
+        // دالة تعديل الطلب
+        function editOrder() {
+            if (confirm('بنرجعك للمنيو عشان تعدل طلبك. متأكد؟')) {
+                socket.emit('cancel-order', currentOrderId);
+                
+                // نشيل الطلب من القائمة
+                myOrders = myOrders.filter(id => id !== currentOrderId);
+                localStorage.setItem('myOrders', JSON.stringify(myOrders));
+                
+                // نحذف وقت الطلب الخاص به
+                localStorage.removeItem('orderTime_' + currentOrderId);
+                
+                currentOrderId = null;
+                localStorage.removeItem('currentOrderId');
+                localStorage.removeItem('orderTime');
+                
+                clearInterval(timerInterval);
+                updateOrderStatusButton();
+                showPage('menu-page');
+            }
+        }
+
+        // دالة تحديث زر حالة الطلب
+        function updateOrderStatusButton() {
+            const orderStatusBtn = document.getElementById('order-status-btn');
+            if (!orderStatusBtn) return;
+            
+            // نجيب الطلبات النشطة فقط (pending, preparing, ready)
+            const activeOrders = myOrders.map(id => allOrders.find(o => o.id === id))
+                .filter(o => o && ['pending', 'preparing', 'ready'].includes(o.status));
+            
+            // لو فيه طلبات نشطة، نظهر الزر
+            if (activeOrders.length > 0) {
+                orderStatusBtn.style.display = 'block';
+            } else {
+                orderStatusBtn.style.display = 'none';
+            }
+        }
+
+        // دالة فحص حالة الطلب
+        function checkOrderStatus() {
+            if (myOrders.length === 0) {
+                alert('ما فيه طلبات حالية!');
+                return;
+            }
+            
+            // لو فيه طلب حالي، نطلب تحديثه
+            if (currentOrderId) {
+                socket.emit('request-order-status', currentOrderId);
+                showPage('invoice-page');
+            } else if (myOrders.length > 0) {
+                // لو مافيه طلب حالي، نعرض آخر طلب
+                currentOrderId = myOrders[myOrders.length - 1];
+                localStorage.setItem('currentOrderId', currentOrderId);
+                socket.emit('request-order-status', currentOrderId);
+                showPage('invoice-page');
+            }
+        }
+
+        // دالة عرض الطلبات المكتملة
+        function renderCompletedOrders(orders) {
+            const list = document.getElementById('completed-orders-list');
+            
+            if (orders.length === 0) {
+                list.innerHTML = '<p style="text-align: center; color: #666; margin-top: 20px;">لا توجد طلبات مكتملة...</p>';
+                return;
+            }
+            
+            // ترتيب: الجديد فوق
+            orders.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            
+            list.innerHTML = orders.map(order => {
+                const timeAgo = Math.floor((new Date() - new Date(order.timestamp)) / 60000);
+                
+                return `
+                <div class="order-card" style="position: relative; border: 2px solid #4CAF50; background: #1a331a;">
+                    <div class="delivered-stamp">تم التسليم</div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                        <div>
+                            <h3 style="margin: 0; color: var(--accent-color);">${order.customerName}</h3>
+                            <div style="font-size: 0.9rem; color: #fff;">📱 ${order.phone}</div>
+                            <div style="font-size: 0.9rem; color: #aaa;">🚗 ${order.carInfo}</div>
+                        </div>
+                        <div style="text-align: left;">
+                            <div style="font-weight: bold; font-size: 1.2rem;">#${getShortId(order.id)}</div>
+                            <div style="font-size: 0.8rem; color: #666;">منذ ${timeAgo} دقيقة</div>
+                            <div style="font-size: 0.8rem; color: var(--accent-color); margin-top: 5px;">${order.branch === 'okaz' ? 'شارع عكاظ' : 'الحلقة الشرقية'}</div>
+                        </div>
+                    </div>
+
+                    <div style="background: #222; padding: 10px; border-radius: 4px; margin-bottom: 10px;">
+                        ${order.items.map(item => `
+                            <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 3px;">
+                                <span>${item.name}</span>
+                                <span>${item.price}</span>
+                            </div>
+                        `).join('')}
+                        <div style="border-top: 1px solid #444; margin-top: 5px; padding-top: 5px; font-weight: bold; text-align: left;">
+                            الإجمالي: ${order.total} ريال
+                        </div>
+                    </div>
+                </div>
+            `;
+            }).join('');
+        }
+
+        // دالة عرض الطلبات غير المسلمة
+        function renderUndeliveredOrders(orders) {
+            const list = document.getElementById('undelivered-orders-list');
+            
+            if (orders.length === 0) {
+                list.innerHTML = '<p style="text-align: center; color: #666; margin-top: 20px;">لا توجد طلبات غير مسلمة...</p>';
+                return;
+            }
+            
+            // ترتيب: الجديد فوق
+            orders.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            
+            list.innerHTML = orders.map(order => {
+                const timeAgo = Math.floor((new Date() - new Date(order.timestamp)) / 60000);
+                
+                return `
+                <div class="order-card" style="position: relative; border: 2px solid #f44336; background: #331a1a;">
+                    <div class="undelivered-stamp">لم يتم التسليم</div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                        <div>
+                            <h3 style="margin: 0; color: var(--accent-color);">${order.customerName}</h3>
+                            <div style="font-size: 0.9rem; color: #fff;">📱 ${order.phone}</div>
+                            <div style="font-size: 0.9rem; color: #aaa;">🚗 ${order.carInfo}</div>
+                        </div>
+                        <div style="text-align: left;">
+                            <div style="font-weight: bold; font-size: 1.2rem;">#${getShortId(order.id)}</div>
+                            <div style="font-size: 0.8rem; color: #666;">منذ ${timeAgo} دقيقة</div>
+                            <div style="font-size: 0.8rem; color: var(--accent-color); margin-top: 5px;">${order.branch === 'okaz' ? 'شارع عكاظ' : 'الحلقة الشرقية'}</div>
+                        </div>
+                    </div>
+
+                    <div style="background: #222; padding: 10px; border-radius: 4px; margin-bottom: 10px;">
+                        ${order.items.map(item => `
+                            <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 3px;">
+                                <span>${item.name}</span>
+                                <span>${item.price}</span>
+                            </div>
+                        `).join('')}
+                        <div style="border-top: 1px solid #444; margin-top: 5px; padding-top: 5px; font-weight: bold; text-align: left;">
+                            الإجمالي: ${order.total} ريال
+                        </div>
+                    </div>
+                </div>
+            `;
+            }).join('');
+        }
+
+        // ================= Socket.io Listeners (القلب النابض) =================
+        
+        socket.on('connect', () => {
+            console.log('Connected to server');
+            // نخفي شاشة التحميل لما نتصل
+            document.getElementById('initial-loader').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('initial-loader').style.display = 'none';
+            }, 500);
+
+            // استعادة الحالة عند التحديث
+            const savedPage = localStorage.getItem('currentPage');
+            const savedBranch = localStorage.getItem('selectedBranch');
+            
+            if (savedBranch) {
+                selectedBranch = savedBranch;
+                renderMenu(); // عشان نعبي المنيو لو كان في صفحة المنيو
+            }
+
+            // لو الزبون عنده طلب، نحدث حالته ونوديه للفاتورة
+            if (myOrderId) {
+                // نطلب تحديث حالة الطلب هذا تحديداً
+                socket.emit('request-order-status', myOrderId);
+            } else if (savedPage && savedPage !== 'invoice-page') {
+                // لو ما عنده طلب، نرجعه لصفحته المحفوظة (إلا لو كانت فاتورة وهو ما عنده طلب)
+                showPage(savedPage);
+            }
+        });
+
+        // لو انقطع الاتصال، مانظهر شي للزبون (يعيد الاتصال تلقائياً)
+        socket.on('disconnect', () => {
+            console.log('انقطع الاتصال - سيعيد الاتصال تلقائياً');
+            // مانظهر شاشة التحميل عشان مايزعج الزبون
+        });
+        
+        // لما يرجع الاتصال
+        socket.on('reconnect', () => {
+            console.log('تم إعادة الاتصال بنجاح');
+        });
+
+        // أول ما نشبك، نستلم الطلبات الموجودة
+        socket.on('initial-orders', (orders) => {
+            console.log('Initial orders received:', orders.length);
+            allOrders = orders; 
+            renderAdminOrders(orders);
+        });
+
+        // تأكيد استلام الطلب للزبون (عشان نوقف اللودينق)
+        socket.on('order-confirmed', (orderId) => {
+            console.log('تم تأكيد الطلب من السيرفر برقم:', orderId);
+            
+            // نضيف الطلب لقائمة طلبات الزبون
+            if (!myOrders.includes(orderId)) {
+                myOrders.push(orderId);
+                localStorage.setItem('myOrders', JSON.stringify(myOrders));
+            }
+            
+            // نحفظ الطلب الحالي
+            currentOrderId = orderId;
+            localStorage.setItem('currentOrderId', orderId);
+            
+            // نحفظ وقت الطلب بشكل منفصل لكل طلب
+            const orderTimeNow = Date.now();
+            localStorage.setItem('orderTime_' + orderId, orderTimeNow.toString());
+            localStorage.setItem('orderTime', orderTimeNow.toString()); // للتوافق مع الكود القديم
+            
+            // نوقف اللودينق وننقل للفاتورة
+            const btn = document.getElementById('submit-btn');
+            if (btn) {
+                btn.disabled = false;
+                document.getElementById('btn-text').style.display = 'inline';
+                document.getElementById('btn-loader').style.display = 'none';
+            }
+            
+            // نمسح السلة بعد تأكيد الطلب
+            cart = [];
+            updateCartUI();
+            
+            // نطلب تحديث حالة الطلب
+            socket.emit('request-order-status', orderId);
+            
+            showPage('invoice-page');
+            
+            // نبدأ المؤقت للطلب الجديد (نستخدم وقت الطلب الخاص به)
+            const orderTimeValue = parseInt(localStorage.getItem('orderTime_' + orderId));
+            if (orderTimeValue) {
+                startEditTimer(orderId, orderTimeValue);
+            }
+            
+            // نحدث زر حالة الطلب
+            updateOrderStatusButton();
+        });
+
+        // استقبال تحديث حالة طلب معين (للزبون)
+        socket.on('order-status-update', (orderData) => {
+            // إذا هذا طلبي، أحدث الفاتورة
+            if (myOrders.includes(orderData.id)) {
+                // لو الطلب اكتمل (تم التسليم)، نشيله من القائمة
+                if (orderData.status === 'completed') {
+                    myOrders = myOrders.filter(id => id !== orderData.id);
+                    localStorage.setItem('myOrders', JSON.stringify(myOrders));
+                    
+                    // لو كان هذا الطلب الحالي، نمسحه
+                    if (currentOrderId === orderData.id) {
+                        currentOrderId = null;
+                        localStorage.removeItem('currentOrderId');
+                    }
+                    
+                    // نحدث زر حالة الطلب
+                    updateOrderStatusButton();
+                }
+                
+                // لو هذا الطلب الحالي، نحدث الفاتورة
+                if (orderData.id === currentOrderId) {
+                    updateInvoiceUI(orderData);
+                }
+            }
+        });
+
+        // لما يجي تحديث على الطلبات (طلب جديد، تغيير حالة، حذف)
+        socket.on('order-update', (orders) => {
+            console.log('وصل تحديث جديد للطلبات:', orders.length);
+            
+            // نشيك هل فيه طلب جديد عشان نشغل الصوت
+            if (orders.length > allOrders.length) {
+                const audio = document.getElementById('notification-sound');
+                audio.play().catch(e => console.log('لازم تفاعل عشان الصوت يشتغل'));
+            }
+            
+            allOrders = orders; 
+            renderAdminOrders(orders);
+
+            // لو الزبون فاتح الفاتورة، نحدث بياناته
+            if (currentOrderId) {
+                const myOrder = orders.find(o => o.id === currentOrderId);
+                if (myOrder) {
+                    updateInvoiceUI(myOrder);
+                }
+            }
+        });
+
+        // استقبال الطلبات المكتملة
+        socket.on('completed-orders', (orders) => {
+            console.log('وصلت الطلبات المكتملة:', orders.length);
+            renderCompletedOrders(orders);
+        });
+
+        // استقبال الطلبات غير المسلمة
+        socket.on('undelivered-orders', (orders) => {
+            console.log('وصلت الطلبات غير المسلمة:', orders.length);
+            renderUndeliveredOrders(orders);
+        });
+
+        function updateInvoiceUI(order) {
+            // تحديث رقم الطلب
+            document.getElementById('invoice-id').innerText = '#' + getShortId(order.id);
+            
+            // تحديث الحالة مع الختم
+            const statusElement = document.getElementById('invoice-status');
+            statusElement.innerText = getStatusText(order.status);
+            
+            // نغير لون الحالة حسب الوضع
+            if (order.status === 'completed') {
+                statusElement.style.color = '#4CAF50';
+            } else if (order.status === 'undelivered') {
+                statusElement.style.color = '#f44336';
+            } else if (order.status === 'ready') {
+                statusElement.style.color = 'var(--accent-color)';
+            } else {
+                statusElement.style.color = 'var(--accent-color)';
+            }
+            
+            // تحديث التفاصيل (عشان لو حدث الصفحة ما تختفي)
+            const detailsDiv = document.getElementById('invoice-details');
+            detailsDiv.innerHTML = order.items.map(item => `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 5px; border-bottom: 1px solid #333; padding-bottom: 5px;">
+                    <span>${item.name}</span>
+                    <span>${item.price} ريال</span>
+                </div>
+            `).join('');
+            
+            // تحديث المجموع
+            document.getElementById('invoice-total').innerText = order.total;
+            
+            // نعرض الطلبات الأخرى (لو فيه)
+            renderOtherOrders();
+        }
+        
+        // دالة عرض الطلبات الأخرى (غير الطلب الحالي)
+        function renderOtherOrders() {
+            const otherOrdersSection = document.getElementById('other-orders-section');
+            const otherOrdersList = document.getElementById('other-orders-list');
+            
+            if (!otherOrdersSection || !otherOrdersList) return;
+            
+            // نجيب كل الطلبات النشطة غير الطلب الحالي
+            const otherOrders = myOrders
+                .filter(id => id !== currentOrderId)
+                .map(id => allOrders.find(o => o.id === id))
+                .filter(o => o && ['pending', 'preparing', 'ready'].includes(o.status));
+            
+            if (otherOrders.length === 0) {
+                otherOrdersSection.style.display = 'none';
+                return;
+            }
+            
+            otherOrdersSection.style.display = 'block';
+            
+            otherOrdersList.innerHTML = otherOrders.map(order => {
+                const timeAgo = Math.floor((new Date() - new Date(order.timestamp)) / 60000);
+                let statusColor = 'var(--accent-color)';
+                if (order.status === 'ready') statusColor = '#4CAF50';
+                if (order.status === 'preparing') statusColor = '#FF9800';
+                
+                return `
+                <div class="order-card" style="margin-bottom: 15px; cursor: pointer;" onclick="viewOrder('${order.id}')">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="font-size: 0.8rem; color: #888;">رقم الطلب</div>
+                            <div style="font-size: 1.5rem; font-weight: bold; color: var(--accent-color);">#${getShortId(order.id)}</div>
+                        </div>
+                        <div style="text-align: left;">
+                            <div style="font-size: 0.9rem; font-weight: bold; color: ${statusColor};">${getStatusText(order.status)}</div>
+                            <div style="font-size: 0.8rem; color: #666;">منذ ${timeAgo} دقيقة</div>
+                        </div>
+                    </div>
+                </div>
+                `;
+            }).join('');
+        }
+        
+        // دالة عرض طلب معين
+        function viewOrder(orderId) {
+            currentOrderId = orderId;
+            localStorage.setItem('currentOrderId', orderId);
+            socket.emit('request-order-status', orderId);
+        }
+
+    </script>
+</body>
+</html>
